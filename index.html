@@ -1,0 +1,796 @@
+# <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OmniPOS - QuickBooks Edition (Standalone Single-File)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React 18 & ReactDOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel Standalone for in-browser JSX parsing -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #printable-receipt, #printable-receipt * { visibility: visible; }
+      #printable-receipt {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 10px;
+        box-shadow: none !important;
+        border: none !important;
+      }
+    }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased select-none">
+  <div id="root"></div>
+
+  <!-- APPLICATION SCRIPT (BABEL JSX) -->
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // --- Embedded SVG Icons ---
+    const Icon = ({ name, className = "w-4 h-4" }) => {
+      const icons = {
+        shoppingBag: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+          </svg>
+        ),
+        users: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+        ),
+        layers: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        ),
+        truck: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8h4l3 4v4a1 1 0 01-1 1h-2" />
+          </svg>
+        ),
+        calculator: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+        ),
+        book: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+        ),
+        settings: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        ),
+        search: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        ),
+        plus: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+          </svg>
+        ),
+        trash: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        ),
+        printer: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+        ),
+        lock: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        ),
+        download: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+        ),
+        x: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        ),
+        database: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+          </svg>
+        ),
+        clock: (
+          <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        )
+      };
+      return icons[name] || null;
+    };
+
+    // --- Embedded Sample Master Data ---
+    const DEFAULT_PRODUCTS = [
+      { id: 'item-101', sku: 'HDW-4401', upc: '088381500123', name: 'Dewalt 20V Max Cordless Drill Kit', department: 'Power Tools', cost: 79.50, price: 129.99, stock: 14, reorderPoint: 5, taxable: true },
+      { id: 'item-102', sku: 'PLM-9021', upc: '037155004512', name: 'BrassCraft 1/2" Ball Valve Lead-Free', department: 'Plumbing', cost: 4.80, price: 9.49, stock: 45, reorderPoint: 15, taxable: true },
+      { id: 'item-103', sku: 'ELE-1120', upc: '078477810332', name: 'Leviton 15A Tamper Outlet (10pk)', department: 'Electrical', cost: 14.20, price: 24.99, stock: 28, reorderPoint: 10, taxable: true },
+      { id: 'item-104', sku: 'FAS-3305', upc: '764654311029', name: 'GRK Fasteners 3-1/8" R4 Multi-Purpose Screws', department: 'Fasteners', cost: 8.90, price: 16.49, stock: 62, reorderPoint: 20, taxable: true },
+      { id: 'item-105', sku: 'PNT-2210', upc: '042238491023', name: 'Wooster Pro 9" Roller Cover 3/8" Nap (3pk)', department: 'Paint', cost: 6.10, price: 11.99, stock: 30, reorderPoint: 12, taxable: true },
+      { id: 'item-106', sku: 'SFT-7701', upc: '051131070241', name: '3M N95 Respirator Mask with Valve (10pk)', department: 'Safety', cost: 11.20, price: 21.99, stock: 18, reorderPoint: 8, taxable: true },
+      { id: 'item-107', sku: 'HDW-1040', upc: '037103214567', name: 'Stanley 25ft FatMax Tape Measure', department: 'Hand Tools', cost: 13.50, price: 24.99, stock: 35, reorderPoint: 10, taxable: true },
+      { id: 'item-108', sku: 'PLM-3301', upc: '039923001923', name: 'SharkBite 1/2" Push-to-Connect Tee', department: 'Plumbing', cost: 6.90, price: 12.98, stock: 38, reorderPoint: 10, taxable: true },
+      { id: 'item-109', sku: 'ELE-5502', upc: '078477219921', name: 'Southwire 250-ft 12/2 Romex Wire', department: 'Electrical', cost: 92.00, price: 139.00, stock: 9, reorderPoint: 4, taxable: true }
+    ];
+
+    const DEFAULT_CUSTOMERS = [
+      { id: 'cust-1', name: 'Apex Commercial Contracting', company: 'Apex Contracting LLC', phone: '(555) 234-5678', balance: 1420.50, creditLimit: 5000.00, resaleNumber: 'RES-99412', terms: 'Net 30' },
+      { id: 'cust-2', name: 'Highland Plumbing & Mechanical', company: 'Highland Plumbing Inc', phone: '(555) 876-5432', balance: 640.00, creditLimit: 3000.00, resaleNumber: 'RES-88201', terms: 'Net 15' },
+      { id: 'cust-3', name: 'Riverfront Property Maintenance', company: 'Riverfront Properties', phone: '(555) 345-9876', balance: 0.00, creditLimit: 2500.00, resaleNumber: '', terms: 'Net 30' },
+      { id: 'cust-4', name: 'Walk-in Retail Customer', company: '', phone: '', balance: 0.00, creditLimit: 0.00, resaleNumber: '', terms: 'Due Upon Receipt' }
+    ];
+
+    const DEFAULT_STAFF = [
+      { id: 'staff-1', name: 'Administrator / Store Manager', pin: '1234', role: 'manager' },
+      { id: 'staff-2', name: 'Sarah Jenkins (Pro Desk)', pin: '1001', role: 'associate' },
+      { id: 'staff-3', name: 'Mike Ross (Hardware Lead)', pin: '1002', role: 'associate' },
+      { id: 'staff-4', name: 'Elena Torres (Cashier)', pin: '1003', role: 'cashier' }
+    ];
+
+    const DEFAULT_SETTINGS = {
+      storeName: 'OmniPOS Hardware & Supply Co.',
+      storeAddress: '100 Industrial Parkway, Suite 4B, Austin, TX 78701',
+      storePhone: '(512) 555-0199',
+      taxRate: 8.25,
+      workstation: 'WS-01 (Register Front)',
+      drawerStartingCash: 200.00,
+      currency: '$',
+      qbCompanyFile: 'OmniPOS_Hardware_Live.QBW',
+      glAccounts: {
+        undepositedFunds: '10500 · Undeposited Funds',
+        accountsReceivable: '12000 · Accounts Receivable (A/R)',
+        salesTaxPayable: '22000 · Sales Tax Payable',
+        salesRevenue: '40000 · Retail & Pro Sales Revenue'
+      }
+    };
+
+    function App() {
+      const [products, setProducts] = useState(() => JSON.parse(localStorage.getItem('omnipos_products')) || DEFAULT_PRODUCTS);
+      const [customers, setCustomers] = useState(() => JSON.parse(localStorage.getItem('omnipos_customers')) || DEFAULT_CUSTOMERS);
+      const [settings, setSettings] = useState(() => JSON.parse(localStorage.getItem('omnipos_settings')) || DEFAULT_SETTINGS);
+      const [transactions, setTransactions] = useState(() => JSON.parse(localStorage.getItem('omnipos_txs')) || []);
+      const [parkedTickets, setParkedTickets] = useState(() => JSON.parse(localStorage.getItem('omnipos_parked')) || []);
+
+      const [activeTab, setActiveTab] = useState('register');
+      const [currentStaff, setCurrentStaff] = useState(DEFAULT_STAFF[0]);
+      const [isTerminalLocked, setIsTerminalLocked] = useState(false);
+      const [drawerCash, setDrawerCash] = useState(200.00);
+      const [isReturnMode, setIsReturnMode] = useState(false);
+
+      const [cart, setCart] = useState([]);
+      const [selectedCustomer, setSelectedCustomer] = useState(DEFAULT_CUSTOMERS[3]);
+      const [cartDiscountPercent, setCartDiscountPercent] = useState(0);
+
+      const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+      const [lastCompletedTx, setLastCompletedTx] = useState(null);
+      const [showReceiptModal, setShowReceiptModal] = useState(false);
+      const [customItemModal, setCustomItemModal] = useState(false);
+      const [newCustomerModal, setNewCustomerModal] = useState(false);
+      const [newItemModal, setNewItemModal] = useState(false);
+      const [customerPaymentModal, setCustomerPaymentModal] = useState(null);
+      const [pinInput, setPinInput] = useState('');
+      const [pinError, setPinError] = useState('');
+
+      useEffect(() => { localStorage.setItem('omnipos_products', JSON.stringify(products)); }, [products]);
+      useEffect(() => { localStorage.setItem('omnipos_customers', JSON.stringify(customers)); }, [customers]);
+      useEffect(() => { localStorage.setItem('omnipos_settings', JSON.stringify(settings)); }, [settings]);
+      useEffect(() => { localStorage.setItem('omnipos_txs', JSON.stringify(transactions)); }, [transactions]);
+      useEffect(() => { localStorage.setItem('omnipos_parked', JSON.stringify(parkedTickets)); }, [parkedTickets]);
+
+      // Global Keyboard Shortcuts
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          if (isTerminalLocked) return;
+          if (e.key === 'F1') { e.preventDefault(); setActiveTab('register'); }
+          else if (e.key === 'F2') { e.preventDefault(); setActiveTab('inventory'); }
+          else if (e.key === 'F3') { e.preventDefault(); setActiveTab('receiving'); }
+          else if (e.key === 'F4') { e.preventDefault(); handleRecallParked(); }
+          else if (e.key === 'F6') { e.preventDefault(); setActiveTab('customers'); }
+          else if (e.key === 'F7') { e.preventDefault(); setIsReturnMode(prev => !prev); }
+          else if (e.key === 'F8') { e.preventDefault(); setActiveTab('endofday'); }
+          else if (e.key === 'F10') { e.preventDefault(); setActiveTab('qbsync'); }
+          else if (e.key === 'F12') { e.preventDefault(); setActiveTab('settings'); }
+          else if (e.key === 'Escape') {
+            setIsPaymentOpen(false);
+            setShowReceiptModal(false);
+            setCustomItemModal(false);
+            setNewCustomerModal(false);
+            setNewItemModal(false);
+            setCustomerPaymentModal(null);
+          }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+      }, [isTerminalLocked, parkedTickets, cart]);
+
+      const cartSubtotal = useMemo(() => {
+        return cart.reduce((acc, item) => {
+          const sign = isReturnMode ? -1 : 1;
+          const discountedPrice = item.price * (1 - (item.discount || 0) / 100);
+          return acc + (discountedPrice * item.quantity * sign);
+        }, 0);
+      }, [cart, isReturnMode]);
+
+      const cartTax = useMemo(() => {
+        if (selectedCustomer && selectedCustomer.resaleNumber && selectedCustomer.resaleNumber.trim().length > 0) {
+          return 0;
+        }
+        const taxableAmount = cart.reduce((acc, item) => {
+          if (!item.taxable) return acc;
+          const sign = isReturnMode ? -1 : 1;
+          const discountedPrice = item.price * (1 - (item.discount || 0) / 100);
+          return acc + (discountedPrice * item.quantity * sign);
+        }, 0);
+        return Math.max(0, taxableAmount * (settings.taxRate / 100));
+      }, [cart, selectedCustomer, settings.taxRate, isReturnMode]);
+
+      const orderDiscountAmount = (cartSubtotal * cartDiscountPercent) / 100;
+      const cartGrandTotal = cartSubtotal - orderDiscountAmount + cartTax;
+
+      const addToCart = (product) => {
+        setCart(prev => {
+          const existing = prev.find(i => i.id === product.id);
+          if (existing) {
+            return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
+          }
+          return [...prev, {
+            id: product.id,
+            sku: product.sku,
+            name: product.name,
+            cost: product.cost,
+            price: product.price,
+            quantity: 1,
+            taxable: product.taxable,
+            discount: 0
+          }];
+        });
+      };
+
+      const updateCartQty = (id, delta) => {
+        setCart(prev => prev.map(item => {
+          if (item.id === id) {
+            const newQty = item.quantity + delta;
+            return newQty > 0 ? { ...item, quantity: newQty } : null;
+          }
+          return item;
+        }).filter(Boolean));
+      };
+
+      const removeCartItem = (id) => setCart(prev => prev.filter(i => i.id !== id));
+
+      const clearCart = () => {
+        setCart([]);
+        setSelectedCustomer(DEFAULT_CUSTOMERS[3]);
+        setCartDiscountPercent(0);
+        setIsReturnMode(false);
+      };
+
+      const parkCurrentTicket = () => {
+        if (cart.length === 0) return;
+        const newParked = {
+          id: 'PARK-' + Date.now().toString().slice(-4),
+          customer: selectedCustomer,
+          cart: [...cart],
+          isReturnMode,
+          total: cartGrandTotal
+        };
+        setParkedTickets(prev => [newParked, ...prev]);
+        clearCart();
+      };
+
+      const handleRecallParked = () => {
+        if (parkedTickets.length === 0) {
+          alert("No parked tickets available.");
+          return;
+        }
+        const [first, ...rest] = parkedTickets;
+        setCart(first.cart);
+        setSelectedCustomer(first.customer);
+        setIsReturnMode(first.isReturnMode);
+        setParkedTickets(rest);
+        setActiveTab('register');
+      };
+
+      const completeSale = (paymentMethod, tenderAmount) => {
+        const txId = 'TX-' + (10000 + transactions.length + 1);
+        const totalAmount = cartGrandTotal;
+        const changeDue = Math.max(0, tenderAmount - totalAmount);
+
+        // Deduct inventory
+        setProducts(prevProducts => prevProducts.map(p => {
+          const lineItem = cart.find(c => c.id === p.id);
+          if (lineItem) {
+            const qtyDiff = isReturnMode ? lineItem.quantity : -lineItem.quantity;
+            return { ...p, stock: Math.max(0, p.stock + qtyDiff) };
+          }
+          return p;
+        }));
+
+        // Customer A/R
+        if (paymentMethod === 'Account' && selectedCustomer && selectedCustomer.id !== 'cust-4') {
+          setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? { ...c, balance: c.balance + totalAmount } : c));
+        }
+
+        // Cash Drawer
+        if (paymentMethod === 'Cash') {
+          setDrawerCash(prev => prev + (isReturnMode ? -totalAmount : (tenderAmount - changeDue)));
+        }
+
+        const newTx = {
+          id: txId,
+          timestamp: new Date().toISOString(),
+          type: isReturnMode ? 'RETURN' : 'SALE',
+          customer: selectedCustomer,
+          associate: currentStaff,
+          items: [...cart],
+          subtotal: cartSubtotal,
+          tax: cartTax,
+          discountAmount: orderDiscountAmount,
+          total: totalAmount,
+          paymentMethod,
+          tenderAmount,
+          changeDue
+        };
+
+        setTransactions(prev => [newTx, ...prev]);
+        setLastCompletedTx(newTx);
+        setIsPaymentOpen(false);
+        clearCart();
+        setShowReceiptModal(true);
+      };
+
+      const handleAccountPayment = (customer, payAmount, method) => {
+        if (payAmount <= 0) return;
+        setCustomers(prev => prev.map(c => c.id === customer.id ? { ...c, balance: Math.max(0, c.balance - payAmount) } : c));
+        if (method === 'Cash') setDrawerCash(prev => prev + payAmount);
+        setCustomerPaymentModal(null);
+        alert(`Recorded payment of ${settings.currency}${payAmount.toFixed(2)} on account.`);
+      };
+
+      const exportIIF = () => {
+        const today = new Date();
+        const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
+        const salesRevenue = transactions.reduce((sum, tx) => sum + (tx.type === 'SALE' ? tx.subtotal : -tx.subtotal), 0);
+        const taxTotal = transactions.reduce((sum, tx) => sum + (tx.type === 'SALE' ? tx.tax : -tx.tax), 0);
+        const cashTotal = transactions.filter(t => t.paymentMethod === 'Cash').reduce((sum, tx) => sum + tx.total, 0);
+
+        let iif = `!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\tMEMO\n`;
+        iif += `!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\tMEMO\n`;
+        iif += `!ENDTRNS\n`;
+        iif += `TRNS\tGENERAL JOURNAL\t${dateStr}\t${settings.glAccounts.undepositedFunds}\t\t${cashTotal.toFixed(2)}\tPOS-SYNC\tCash Drawer\n`;
+        iif += `SPL\tGENERAL JOURNAL\t${dateStr}\t${settings.glAccounts.salesTaxPayable}\t\t${(-taxTotal).toFixed(2)}\tState Board\tSales Tax\n`;
+        iif += `SPL\tGENERAL JOURNAL\t${dateStr}\t${settings.glAccounts.salesRevenue}\t\t${(-salesRevenue).toFixed(2)}\t\tPOS Merchandise\n`;
+        iif += `ENDTRNS\n`;
+
+        const blob = new Blob([iif], { type: 'text/plain;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `QuickBooks_POS_Sync_${new Date().toISOString().slice(0, 10)}.iif`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const exportCSV = () => {
+        let csv = 'Transaction ID,Date,Type,Customer,Payment Method,Subtotal,Tax,Total\n';
+        transactions.forEach(t => {
+          csv += `"${t.id}","${t.timestamp}","${t.type}","${t.customer ? t.customer.name : 'Walk-in'}","${t.paymentMethod}",${t.subtotal.toFixed(2)},${t.tax.toFixed(2)},${t.total.toFixed(2)}\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `OmniPOS_Transactions_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      if (isTerminalLocked) {
+        return (
+          <div className="min-h-screen bg-[#081c33] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm border border-slate-200 text-center">
+              <div className="w-14 h-14 bg-emerald-50 text-[#2ca01c] rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <Icon name="lock" className="w-7 h-7" />
+              </div>
+              <h1 className="text-lg font-bold text-slate-900">Terminal Locked</h1>
+              <p className="text-xs text-slate-500 mb-4">Enter Employee PIN (Manager: 1234)</p>
+              <input
+                type="password"
+                maxLength="4"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const found = DEFAULT_STAFF.find(s => s.pin === pinInput);
+                    if (found) { setCurrentStaff(found); setIsTerminalLocked(false); setPinInput(''); setPinError(''); }
+                    else setPinError('Invalid PIN code');
+                  }
+                }}
+                placeholder="••••"
+                className="w-full text-center text-3xl font-mono py-2.5 px-4 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2ca01c]"
+                autoFocus
+              />
+              {pinError && <p className="text-xs text-red-600 mt-2 font-medium">{pinError}</p>}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen flex flex-col bg-slate-100 font-sans">
+          {/* Header */}
+          <header className="bg-[#081c33] text-white shadow-md border-b border-slate-800 shrink-0">
+            <div className="px-4 py-2 flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[#2ca01c] flex items-center justify-center font-bold text-white shadow-sm">QB</div>
+                <div>
+                  <h1 className="font-bold text-sm tracking-tight text-white">{settings.storeName}</h1>
+                  <p className="text-[11px] text-slate-400">{settings.workstation} &middot; Cash Till: {settings.currency}{drawerCash.toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsReturnMode(prev => !prev)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                    isReturnMode ? 'bg-amber-500 text-amber-950 border-amber-400 animate-pulse' : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  }`}
+                >
+                  {isReturnMode ? 'RETURN MODE ACTIVE' : 'Return Mode [F7]'}
+                </button>
+                <div className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-300">
+                  {currentStaff.name.split(' ')[0]} ({currentStaff.role})
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTerminalLocked(true)}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700"
+                  title="Lock Terminal"
+                >
+                  <Icon name="lock" className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Navigation Bar */}
+            <nav className="px-3 flex items-center gap-1 overflow-x-auto text-xs font-medium py-1.5 bg-[#0c2340]">
+              {[
+                { id: 'register', label: 'Cash Register [F1]', icon: 'shoppingBag' },
+                { id: 'inventory', label: 'Item List [F2]', icon: 'layers' },
+                { id: 'receiving', label: 'Receiving PO [F3]', icon: 'truck' },
+                { id: 'customers', label: 'Customer Center [F6]', icon: 'users' },
+                { id: 'endofday', label: 'End of Day Z-Out [F8]', icon: 'calculator' },
+                { id: 'qbsync', label: 'QuickBooks Sync [F10]', icon: 'book' },
+                { id: 'settings', label: 'Store Settings [F12]', icon: 'settings' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-2 transition whitespace-nowrap ${
+                    activeTab === tab.id ? 'bg-[#2ca01c] text-white font-bold shadow-sm' : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                  }`}
+                >
+                  <Icon name={tab.icon} className="w-3.5 h-3.5" />
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+
+              {parkedTickets.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleRecallParked}
+                  className="ml-auto px-2.5 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-md text-xs font-bold hover:bg-amber-500/30 flex items-center gap-1.5"
+                >
+                  <Icon name="clock" className="w-3.5 h-3.5" />
+                  <span>Parked ({parkedTickets.length}) [F4]</span>
+                </button>
+              )}
+            </nav>
+          </header>
+
+          {/* Main Content Area */}
+          <main className="flex-1 overflow-hidden flex">
+            {activeTab === 'register' && (
+              <div className="flex-1 flex flex-col lg:flex-row h-full overflow-hidden">
+                {/* Catalog View */}
+                <div className="flex-1 flex flex-col border-r border-slate-200 bg-white overflow-hidden p-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-200 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCustomItemModal(true)}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1.5"
+                    >
+                      <Icon name="plus" className="w-3.5 h-3.5" />
+                      <span>Custom Non-Inventory Item</span>
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto pt-3 custom-scroll">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      {products.map(product => (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => addToCart(product)}
+                          className="p-3 bg-white hover:bg-emerald-50/40 rounded-xl border border-slate-200 hover:border-[#2ca01c] transition text-left flex flex-col justify-between shadow-xs group"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-mono text-slate-500 font-semibold">{product.sku}</span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">Stock: {product.stock}</span>
+                            </div>
+                            <h3 className="text-xs font-semibold text-slate-900 group-hover:text-[#2ca01c] line-clamp-2">{product.name}</h3>
+                          </div>
+                          <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
+                            <span className="text-sm font-bold text-slate-900 font-mono">${product.price.toFixed(2)}</span>
+                            <span className="text-[10px] bg-slate-100 group-hover:bg-[#2ca01c] group-hover:text-white px-2 py-1 rounded font-bold transition">+ Add</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Cart Sidebar */}
+                <div className="w-full lg:w-96 bg-slate-50 flex flex-col h-full border-l border-slate-200 shrink-0">
+                  <div className="p-3 bg-white border-b border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Icon name="users" className="w-4 h-4 text-slate-500" />
+                      <div className="text-xs truncate">
+                        <span className="text-slate-500">Customer: </span>
+                        <strong className="text-slate-800">{selectedCustomer.name}</strong>
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => setActiveTab('customers')} className="text-[11px] text-[#2ca01c] font-semibold hover:underline">Change</button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scroll">
+                    {cart.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
+                        <Icon name="shoppingBag" className="w-10 h-10 stroke-slate-300 mb-2" />
+                        <p className="text-xs font-medium">Ticket is empty</p>
+                      </div>
+                    ) : (
+                      cart.map(item => (
+                        <div key={item.id} className="p-2.5 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col gap-1.5">
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <h4 className="text-xs font-semibold text-slate-800">{item.name}</h4>
+                              <span className="text-[10px] text-slate-500 font-mono">SKU: {item.sku}</span>
+                            </div>
+                            <span className="text-xs font-bold text-slate-900 font-mono">
+                              ${((item.price * item.quantity) * (isReturnMode ? -1 : 1)).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                            <div className="flex items-center gap-1.5">
+                              <button type="button" onClick={() => updateCartQty(item.id, -1)} className="w-5 h-5 bg-slate-100 rounded flex items-center justify-center font-bold">-</button>
+                              <span className="font-mono px-1 font-semibold">{item.quantity}</span>
+                              <button type="button" onClick={() => updateCartQty(item.id, 1)} className="w-5 h-5 bg-slate-100 rounded flex items-center justify-center font-bold">+</button>
+                              <span className="text-slate-400 text-[11px] ml-1">@ ${item.price.toFixed(2)}</span>
+                            </div>
+                            <button type="button" onClick={() => removeCartItem(item.id)} className="text-slate-400 hover:text-red-600 p-1">
+                              <Icon name="trash" className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Summary & Tender */}
+                  <div className="p-3 bg-white border-t border-slate-200 space-y-2">
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between text-slate-600"><span>Subtotal:</span><span className="font-mono">${cartSubtotal.toFixed(2)}</span></div>
+                      <div className="flex justify-between text-slate-600"><span>Tax ({settings.taxRate}%):</span><span className="font-mono">${cartTax.toFixed(2)}</span></div>
+                      <div className="flex justify-between text-sm font-bold text-slate-900 pt-1.5 border-t border-slate-200">
+                        <span>Total:</span>
+                        <span className="font-mono text-[#2ca01c]">${cartGrandTotal.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5 pt-1">
+                      <button type="button" onClick={parkCurrentTicket} disabled={cart.length === 0} className="py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 rounded-lg text-xs font-semibold">Park</button>
+                      <button type="button" onClick={() => { const d = prompt("Discount %:", cartDiscountPercent); if (d !== null) setCartDiscountPercent(parseFloat(d) || 0); }} className="py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold">Discount</button>
+                      <button type="button" onClick={clearCart} disabled={cart.length === 0} className="py-1.5 bg-slate-100 hover:bg-red-50 text-red-600 disabled:opacity-50 rounded-lg text-xs font-semibold">Clear</button>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={cart.length === 0}
+                      onClick={() => setIsPaymentOpen(true)}
+                      className="w-full py-3 rounded-xl font-bold text-sm text-white shadow-md bg-[#2ca01c] hover:bg-[#238316] disabled:opacity-50"
+                    >
+                      {isReturnMode ? 'Process Refund' : 'Tender / Pay'} (${cartGrandTotal.toFixed(2)})
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Item List Inventory */}
+            {activeTab === 'inventory' && (
+              <div className="flex-1 flex flex-col h-full bg-white overflow-hidden p-6 max-w-5xl mx-auto w-full">
+                <div className="pb-4 border-b border-slate-200 flex justify-between items-center">
+                  <h2 className="text-lg font-bold text-slate-900">Inventory Master List</h2>
+                  <button type="button" onClick={() => setNewItemModal(true)} className="px-3 py-1.5 bg-[#2ca01c] hover:bg-[#238316] text-white rounded-lg text-xs font-bold">+ New Item</button>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scroll mt-4 border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-semibold">
+                      <tr>
+                        <th className="py-2.5 px-3">Item / SKU</th>
+                        <th className="py-2.5 px-3">Department</th>
+                        <th className="py-2.5 px-3 text-right">Cost</th>
+                        <th className="py-2.5 px-3 text-right">Price</th>
+                        <th className="py-2.5 px-3 text-center">On Hand</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {products.map(p => (
+                        <tr key={p.id} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-semibold text-slate-900">{p.name} ({p.sku})</td>
+                          <td className="py-2 px-3 text-slate-600">{p.department}</td>
+                          <td className="py-2 px-3 text-right font-mono">${p.cost.toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">${p.price.toFixed(2)}</td>
+                          <td className="py-2 px-3 text-center font-mono font-bold">{p.stock}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Customer Center */}
+            {activeTab === 'customers' && (
+              <div className="flex-1 flex flex-col h-full bg-white overflow-hidden p-6 max-w-5xl mx-auto w-full">
+                <div className="pb-4 border-b border-slate-200 flex justify-between items-center">
+                  <h2 className="text-lg font-bold text-slate-900">Customer Center & Accounts Receivable</h2>
+                  <button type="button" onClick={() => setNewCustomerModal(true)} className="px-3 py-1.5 bg-[#2ca01c] hover:bg-[#238316] text-white rounded-lg text-xs font-bold">+ New Account</button>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scroll mt-4 border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-semibold">
+                      <tr>
+                        <th className="py-2.5 px-3">Customer / Company</th>
+                        <th className="py-2.5 px-3">Terms</th>
+                        <th className="py-2.5 px-3 text-right">Balance (A/R)</th>
+                        <th className="py-2.5 px-3 text-right">Credit Limit</th>
+                        <th className="py-2.5 px-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {customers.map(c => (
+                        <tr key={c.id} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-semibold text-slate-900">{c.name}</td>
+                          <td className="py-2 px-3 text-slate-600">{c.terms}</td>
+                          <td className={`py-2 px-3 text-right font-mono font-bold ${c.balance > 0 ? 'text-red-600' : 'text-slate-800'}`}>${c.balance.toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right font-mono">${c.creditLimit.toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right space-x-2">
+                            <button type="button" onClick={() => { setSelectedCustomer(c); setActiveTab('register'); }} className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded font-semibold">Select</button>
+                            {c.balance > 0 && (
+                              <button type="button" onClick={() => setCustomerPaymentModal(c)} className="px-2 py-1 bg-[#2ca01c] text-white rounded font-bold">Receive Pay</button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* End of Day Z-Report */}
+            {activeTab === 'endofday' && (
+              <div className="flex-1 flex flex-col h-full bg-slate-50 overflow-y-auto p-6 custom-scroll">
+                <div className="max-w-2xl mx-auto w-full bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                  <div className="pb-3 border-b border-slate-200 flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-slate-900">End of Day (Z-Report)</h2>
+                    <button type="button" onClick={() => alert("Z-Report printed & register closed for today.")} className="px-4 py-2 bg-[#2ca01c] text-white rounded-xl text-xs font-bold">Close Register</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-slate-50 rounded-xl"><span className="text-slate-500 block">Total Sales</span><strong className="text-base font-mono">${transactions.reduce((s, t) => s + t.total, 0).toFixed(2)}</strong></div>
+                    <div className="p-3 bg-slate-50 rounded-xl"><span className="text-slate-500 block">Drawer Cash</span><strong className="text-base font-mono">${drawerCash.toFixed(2)}</strong></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* QuickBooks Sync */}
+            {activeTab === 'qbsync' && (
+              <div className="flex-1 flex flex-col h-full bg-white overflow-hidden p-6 max-w-4xl mx-auto w-full">
+                <div className="pb-4 border-b border-slate-200 flex justify-between items-center">
+                  <h2 className="text-lg font-bold text-slate-900">QuickBooks Integration & IIF Export</h2>
+                  <div className="space-x-2">
+                    <button type="button" onClick={exportCSV} className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold">Export CSV</button>
+                    <button type="button" onClick={exportIIF} className="px-4 py-2 bg-[#2ca01c] hover:bg-[#238316] text-white rounded-xl text-xs font-bold">Export .IIF File</button>
+                  </div>
+                </div>
+                <div className="my-4 p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900">
+                  Target Company File: <strong>{settings.qbCompanyFile}</strong>. Use the buttons above to export general ledger entries.
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* Payment Modal */}
+          {isPaymentOpen && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4">
+                <h3 className="font-bold text-sm text-slate-900">Select Tender Method</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {['Cash', 'Credit Card', 'Account'].map(m => (
+                    <button key={m} type="button" onClick={() => completeSale(m, cartGrandTotal)} className="py-2 bg-slate-100 hover:bg-[#2ca01c] hover:text-white rounded-lg text-xs font-bold transition">
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" onClick={() => setIsPaymentOpen(false)} className="w-full py-2 bg-slate-200 rounded-lg text-xs font-semibold">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* Thermal Receipt Modal */}
+          {showReceiptModal && lastCompletedTx && (
+            <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-3 font-mono text-xs" id="printable-receipt">
+                <div className="text-center pb-2 border-b border-dashed border-slate-300">
+                  <h3 className="font-bold text-sm uppercase">{settings.storeName}</h3>
+                  <p>{settings.storeAddress}</p>
+                  <p>{new Date().toLocaleString()} &middot; {lastCompletedTx.id}</p>
+                </div>
+                <div className="space-y-1">
+                  {lastCompletedTx.items.map((it, idx) => (
+                    <div key={idx} className="flex justify-between"><span>{it.quantity}x {it.name}</span><span>${(it.quantity * it.price).toFixed(2)}</span></div>
+                  ))}
+                </div>
+                <div className="pt-2 border-t border-dashed border-slate-300 flex justify-between font-bold text-sm">
+                  <span>TOTAL:</span><span>${lastCompletedTx.total.toFixed(2)}</span>
+                </div>
+                <div className="flex gap-2 pt-3">
+                  <button type="button" onClick={() => window.print()} className="flex-1 py-2 bg-[#2ca01c] text-white rounded-xl font-bold">Print Receipt</button>
+                  <button type="button" onClick={() => setShowReceiptModal(false)} className="px-4 py-2 bg-slate-200 rounded-xl font-semibold">Done</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>-po
